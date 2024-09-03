@@ -1,0 +1,50 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [ created ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Rust
+        run: rustup update
+
+      - run: cargo version
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+
+      - name: Build
+        run: cargo-hack hack build --feature-powerset
+
+      - name: Run tests
+        run: cargo-hack hack test --feature-powerset
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Rust
+        run: rustup update
+
+      - run: cargo version
+
+      - run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
+
+      - run: cargo publish

@@ -1,0 +1,24 @@
+[package]
+name = "embedded-io-extras"
+description = "Additional utilities for embedded-io, including a Cursor type for no_std environments."
+homepage = "https://github.com/lightsail-network/embedded-io-extras"
+repository = "https://github.com/lightsail-network/embedded-io-extras"
+authors = ["overcat <4catcode@gmail.com>"]
+categories = [
+    "embedded",
+    "no-std",
+]
+license = "MIT"
+readme = "README.md"
+version = "0.0.1"
+edition = "2021"
+keywords = ["embedded", "no_std", "cursor", "rust"]
+
+[dependencies]
+embedded-io = { version = "0.6.1", default-features = false }
+
+[features]
+default = ["std", "alloc"]
+std = ["embedded-io/std"]
+alloc = ["embedded-io/alloc"]
+defmt-03 = ["embedded-io/defmt-03"]
