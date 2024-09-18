@@ -10,14 +10,14 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-embedded-io-extras = "0.0.1"
+embedded-io-extras = "0.0.2"
 ```
 
 and for `no_std` environments:
 
 ```toml
 [dependencies]
-embedded-io-extras = { version = "0.0.1", default-features = false, features = ["alloc"] }
+embedded-io-extras = { version = "0.0.2", default-features = false, features = ["alloc"] }
 ```
 
 - **`std`**: Enable this feature to use `std` with `embedded-io`. Enabled by default.

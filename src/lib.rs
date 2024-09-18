@@ -11,7 +11,10 @@ pub use embedded_io::*;
 /// A `Cursor` wraps an in-memory buffer and provides it with a
 /// [`Seek`] implementation.
 ///
-/// This trait is the embedded-io equivalent of std::io::cursor::Cursor.
+/// This trait is similar to std::io::cursor::Cursor, but it is based on the
+/// embedded-io library, so there may be some differences compared to the
+/// std platform's implementation. It is recommended to refer to the
+/// embedded-io documentation for more details.
 ///
 /// `Cursor`s are used with in-memory buffers, anything implementing
 /// <code>[AsRef]<\[u8]></code>, to allow them to implement [`Read`] and/or [`Write`],
@@ -284,7 +287,7 @@ where
 
 impl Write for Cursor<&mut [u8]> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        Ok(slice_write(&mut self.pos, &mut self.inner, buf))
+        slice_write(&mut self.pos, &mut self.inner, buf)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -294,7 +297,7 @@ impl Write for Cursor<&mut [u8]> {
 
 impl<const N: usize> Write for Cursor<[u8; N]> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        Ok(slice_write(&mut self.pos, &mut self.inner, buf))
+        slice_write(&mut self.pos, &mut self.inner, buf)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -324,16 +327,11 @@ impl Write for Cursor<&mut Vec<u8>> {
     }
 }
 
-fn slice_write(pos_mut: &mut u64, slice: &mut [u8], buf: &[u8]) -> usize {
+fn slice_write(pos_mut: &mut u64, slice: &mut [u8], buf: &[u8]) -> Result<usize, ErrorKind> {
     let pos = cmp::min(*pos_mut, slice.len() as u64) as usize;
-    if pos >= slice.len() {
-        return 0;
-    }
-    // Write::write will not return an error in this case,
-    // so we can safely unwrap.
-    let amt = (&mut slice[pos..]).write(buf).unwrap();
+    let amt = (&mut slice[pos..]).write(buf).map_err(|err| err.kind())?;
     *pos_mut += amt as u64;
-    amt
+    Ok(amt)
 }
 
 /// Resizing write implementation for [`Cursor`]
@@ -350,11 +348,6 @@ fn vec_write(pos_mut: &mut u64, vec: &mut Vec<u8>, buf: &[u8]) -> usize {
     let pos = *pos_mut as usize;
 
     // Ensure the vector is large enough
-    if pos > vec.len() {
-        vec.resize(pos, 0);
-    }
-
-    // Determine the amount that can be written
     let end_pos = pos + buf.len();
     if end_pos > vec.len() {
         vec.resize(end_pos, 0);
@@ -500,33 +493,19 @@ mod tests {
     }
 
     #[test]
-    fn test_slice_write() {
-        let mut slice = [0; 3];
-        let mut cur = Cursor::new(&mut slice[..]);
-        assert_eq!(cur.write(&[1, 2, 3]).unwrap(), 3);
-        assert_eq!(cur.position(), 3);
-        assert_eq!(slice, [1, 2, 3]);
-
-        let mut cur = Cursor::new(&mut slice[..]);
-        cur.set_position(1);
-        assert_eq!(cur.write(&[4, 5]).unwrap(), 2);
-        assert_eq!(slice, [1, 4, 5]);
-    }
-
-    #[test]
-    fn test_array_write_full() {
+    fn test_slice_write_full() {
         let array = [0u8; 3];
         let mut cur = Cursor::new(array);
         assert_eq!(cur.write(&[1, 2, 3]).unwrap(), 3);
         assert_eq!(cur.get_ref(), &[1, 2, 3]);
 
-        // Attempt to write beyond the array's capacity
-        assert_eq!(cur.write(&[4, 5, 6]).unwrap(), 0); // Should not write anything
+        // Attempt to write beyond the array's capacity, there should raise an error
+        assert_eq!(cur.write(&[4, 5, 6]), Err(ErrorKind::WriteZero));
         assert_eq!(cur.get_ref(), &[1, 2, 3]); // Array remains unchanged
     }
 
     #[test]
-    fn test_array_write() {
+    fn test_slice_write() {
         let mut arr = [0; 3];
         let mut cur = Cursor::new(&mut arr[..]);
         assert_eq!(cur.write(&[1, 2, 3]).unwrap(), 3);
@@ -577,7 +556,7 @@ mod tests {
         let mut slice = [0u8; 10];
         let buf = [1, 2, 3];
         let mut pos = 0;
-        let written = slice_write(&mut pos, &mut slice, &buf);
+        let written = slice_write(&mut pos, &mut slice, &buf).unwrap();
         assert_eq!(written, 3);
         assert_eq!(&slice[..3], &buf);
         assert_eq!(pos, 3);
@@ -588,7 +567,7 @@ mod tests {
         let mut slice = [0u8; 5];
         let buf = [1, 2, 3, 4, 5, 6];
         let mut pos = 0;
-        let written = slice_write(&mut pos, &mut slice, &buf);
+        let written = slice_write(&mut pos, &mut slice, &buf).unwrap();
         assert_eq!(written, 5);
         assert_eq!(&slice, &[1, 2, 3, 4, 5]);
         assert_eq!(pos, 5);
@@ -599,7 +578,7 @@ mod tests {
         let mut slice = [0u8; 10];
         let buf = [4, 5, 6];
         let mut pos = 7;
-        let written = slice_write(&mut pos, &mut slice, &buf);
+        let written = slice_write(&mut pos, &mut slice, &buf).unwrap();
         assert_eq!(written, 3);
         assert_eq!(&slice[7..10], &buf);
         assert_eq!(pos, 10);
@@ -610,9 +589,10 @@ mod tests {
         let mut slice = [0u8; 5];
         let buf = [1, 2, 3];
         let mut pos = 10;
-        let written = slice_write(&mut pos, &mut slice, &buf);
-        assert_eq!(written, 0);
-        assert_eq!(pos, 10);
+        assert_eq!(
+            slice_write(&mut pos, &mut slice, &buf),
+            Err(ErrorKind::WriteZero)
+        );
     }
 
     #[test]
@@ -620,7 +600,7 @@ mod tests {
         let mut slice = [0u8; 10];
         let buf = [];
         let mut pos = 0;
-        let written = slice_write(&mut pos, &mut slice, &buf);
+        let written = slice_write(&mut pos, &mut slice, &buf).unwrap();
         assert_eq!(written, 0);
         assert_eq!(pos, 0);
     }
@@ -630,7 +610,7 @@ mod tests {
         let mut slice = [0u8; 5];
         let buf = [1, 2, 3, 4, 5, 6];
         let mut pos = 3;
-        let written = slice_write(&mut pos, &mut slice, &buf);
+        let written = slice_write(&mut pos, &mut slice, &buf).unwrap();
         assert_eq!(written, 2);
         assert_eq!(&slice, &[0, 0, 0, 1, 2]);
         assert_eq!(pos, 5);
