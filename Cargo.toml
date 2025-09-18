@@ -1,0 +1,18 @@
+[package]
+name = "embedded-io-cursor"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.66"
+description = "A no_std-compatible Cursor implementation designed for use with embedded-io."
+license = "MIT OR Apache-2.0"
+categories = ["embedded", "no-std"]
+
+[features]
+default = []
+std = ["alloc", "embedded-io/std"]
+alloc = ["embedded-io/alloc"]
+defmt = ["embedded-io/defmt-03", "dep:defmt"]
+
+[dependencies]
+embedded-io = { version = "0.6.1", default-features = false }
+defmt = { version = "1", optional = true }
